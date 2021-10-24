@@ -604,17 +604,27 @@ int __kvm_arm_vcpu_set_events(struct kvm_vcpu *vcpu,
 void kvm_arm_halt_guest(struct kvm *kvm);
 void kvm_arm_resume_guest(struct kvm *kvm);
 
+#ifdef CONFIG_KCOV
+int kcov_start_kvm(void);
+void kcov_stop_kvm(int ret);
+#else
+static inline int kcov_start_kvm(void) { return 0; }
+static inline void kcov_stop_kvm(int ret) {}
+#endif
+
 #define vcpu_has_run_once(vcpu)	!!rcu_access_pointer((vcpu)->pid)
 
 #ifndef __KVM_NVHE_HYPERVISOR__
-#define kvm_call_hyp_nvhe(f, ...)						\
+#define kvm_call_hyp_nvhe(f, ...)					\
 	({								\
+		int kcov = kcov_start_kvm();				\
 		struct arm_smccc_res res;				\
 									\
 		arm_smccc_1_1_hvc(KVM_HOST_SMCCC_FUNC(f),		\
 				  ##__VA_ARGS__, &res);			\
 		WARN_ON(res.a0 != SMCCC_RET_SUCCESS);			\
 									\
+		kcov_stop_kvm(kcov);					\
 		res.a1;							\
 	})
 

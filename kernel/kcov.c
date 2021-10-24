@@ -332,6 +332,7 @@ static void kcov_start(struct task_struct *t, struct kcov *kcov,
 	t->kcov_size = size;
 	t->kcov_area = area;
 	t->kcov_sequence = sequence;
+	t->kcov_stop_cb = NULL;
 	/* See comment in check_kcov_mode(). */
 	barrier();
 	WRITE_ONCE(t->kcov_mode, mode);
@@ -339,11 +340,14 @@ static void kcov_start(struct task_struct *t, struct kcov *kcov,
 
 static void kcov_stop(struct task_struct *t)
 {
+	if (t->kcov_stop_cb)
+		t->kcov_stop_cb();
 	WRITE_ONCE(t->kcov_mode, KCOV_MODE_DISABLED);
 	barrier();
 	t->kcov = NULL;
 	t->kcov_size = 0;
 	t->kcov_area = NULL;
+	t->kcov_stop_cb = NULL;
 }
 
 static void kcov_task_reset(struct task_struct *t)

@@ -318,7 +318,15 @@ static int share_pfn_hyp(u64 pfn)
 {
 	struct rb_node **node, *parent;
 	struct hyp_shared_pfn *this;
-	int ret = 0;
+	int kcov, ret = 0;
+
+	/*
+	 * If KCOV is enabled, then the hypercall inside the critical section
+	 * could recursively call this function to share KCOV pages with hyp.
+	 * Call the initializer now to avoid recursively taking the mutex.
+	 */
+	if (IS_ENABLED(CONFIG_KCOV))
+		kcov = kcov_start_kvm();
 
 	mutex_lock(&hyp_shared_pfns_lock);
 	this = find_shared_pfn(pfn, &node, &parent);
@@ -341,6 +349,8 @@ static int share_pfn_hyp(u64 pfn)
 unlock:
 	mutex_unlock(&hyp_shared_pfns_lock);
 
+	if (IS_ENABLED(CONFIG_KCOV))
+		kcov_stop_kvm(kcov);
 	return ret;
 }
 

@@ -76,6 +76,9 @@ enum __kvm_host_smccc_func {
 	__KVM_HOST_SMCCC_FUNC___vgic_v3_save_aprs,
 	__KVM_HOST_SMCCC_FUNC___vgic_v3_restore_aprs,
 	__KVM_HOST_SMCCC_FUNC___pkvm_vcpu_init_traps,
+#ifdef CONFIG_KCOV
+	__KVM_HOST_SMCCC_FUNC___kvm_kcov_set_area,
+#endif
 };
 
 #define DECLARE_KVM_VHE_SYM(sym)	extern char sym[]

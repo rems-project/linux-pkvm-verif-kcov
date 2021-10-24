@@ -110,7 +110,9 @@ alternative_cb_end
 
 #else
 
+#include <linux/kvm_host.h>
 #include <linux/pgtable.h>
+
 #include <asm/pgalloc.h>
 #include <asm/cache.h>
 #include <asm/cacheflush.h>
@@ -136,6 +138,36 @@ static __always_inline unsigned long __kern_hyp_va(unsigned long v)
 }
 
 #define kern_hyp_va(v) 	((typeof(v))(__kern_hyp_va((unsigned long)(v))))
+
+static __always_inline unsigned long __hyp_kimg_va(unsigned long v)
+{
+	unsigned long kimage_voffset;
+
+	asm volatile(ALTERNATIVE_CB("movz %0, #0\n"
+				    "movk %0, #0, lsl #16\n"
+				    "movk %0, #0, lsl #32\n"
+				    "movk %0, #0, lsl #48\n",
+				    kvm_get_kimage_voffset)
+		     : "=r" (kimage_voffset));
+
+	return (unsigned long)__hyp_pa(v) + kimage_voffset;
+}
+
+#define hyp_kimg_va(v) 	((typeof(v))(__hyp_kimg_va((unsigned long)(v))))
+
+static __always_inline unsigned long __kaslr_offset(void)
+{
+	unsigned long val;
+
+	asm volatile(ALTERNATIVE_CB("movz %0, #0\n"
+				    "movk %0, #0, lsl #16\n"
+				    "movk %0, #0, lsl #32\n"
+				    "movk %0, #0, lsl #48\n",
+				    kvm_get_kaslr_offset)
+		     : "=r" (val));
+
+	return val;
+}
 
 /*
  * We currently support using a VM-specified IPA size. For backward

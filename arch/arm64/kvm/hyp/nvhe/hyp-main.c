@@ -175,6 +175,16 @@ static void handle___pkvm_vcpu_init_traps(struct kvm_cpu_context *host_ctxt)
 	__pkvm_vcpu_init_traps(kern_hyp_va(vcpu));
 }
 
+#ifdef CONFIG_KCOV
+static void handle___kvm_kcov_set_area(struct kvm_cpu_context *host_ctxt)
+{
+	DECLARE_REG(kvm_pfn_t *, pfns, host_ctxt, 1);
+	DECLARE_REG(size_t, size, host_ctxt, 2);
+
+	cpu_reg(host_ctxt, 1) = kvm_kcov_set_area(pfns, size);
+}
+#endif
+
 typedef void (*hcall_t)(struct kvm_cpu_context *);
 
 #define HANDLE_FUNC(x)	[__KVM_HOST_SMCCC_FUNC_##x] = (hcall_t)handle_##x
@@ -204,6 +214,9 @@ static const hcall_t host_hcall[] = {
 	HANDLE_FUNC(__vgic_v3_save_aprs),
 	HANDLE_FUNC(__vgic_v3_restore_aprs),
 	HANDLE_FUNC(__pkvm_vcpu_init_traps),
+#ifdef CONFIG_KCOV
+	HANDLE_FUNC(__kvm_kcov_set_area),
+#endif
 };
 
 static void handle_host_hcall(struct kvm_cpu_context *host_ctxt)
