@@ -494,8 +494,8 @@ static int kcov_mmap(struct file *filep, struct vm_area_struct *vma)
 			// printk("Inside loop");
 			page = vmalloc_to_page(kcov->area + off);
 			// printk("Completed vmalloc");
-			// if (vm_insert_page(vma, vma->vm_start + off, page))
-			// 	WARN_ONCE(1, "vm_insert_page() failed");
+			if (vm_insert_page(vma, vma->vm_start + off, page))
+				WARN_ONCE(1, "vm_insert_page() failed");
 			// printk("Completed vm_insert_page");
 		}
 		return 0;
