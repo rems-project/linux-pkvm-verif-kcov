@@ -2222,11 +2222,12 @@ int kvm_arch_init(void *opaque)
 	// share_pfn_hyp(pfn);
 
 
-	u64 random_address;
+	// u64 random_address;
 	
-	// random_address = rand_lcg_unsigned();
-	random_address = 0x66ee0bda; // Valid hypervisor address found on fuzzer branch
-	u64 pfn = random_address >> PAGE_SHIFT;
+	// // random_address = rand_lcg_unsigned();
+	// Valid hypervisor address found on fuzzer branch
+	// random_address = 0x66ee0bda; 
+	// u64 pfn = random_address >> PAGE_SHIFT;
 
 
 	return 0;
