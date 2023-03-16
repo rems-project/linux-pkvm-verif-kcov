@@ -325,8 +325,11 @@ static int share_pfn_hyp(u64 pfn)
 	 * could recursively call this function to share KCOV pages with hyp.
 	 * Call the initializer now to avoid recursively taking the mutex.
 	 */
-	if (IS_ENABLED(CONFIG_KCOV))
+	if (IS_ENABLED(CONFIG_KCOV)) {
+		kvm_info("SHARE_PFN_HYP: Calling kcov_start_kvm early");
 		kcov = kcov_start_kvm();
+		kvm_info("SHARE_PFN_HYP: kcov started");
+	}
 
 	mutex_lock(&hyp_shared_pfns_lock);
 	this = find_shared_pfn(pfn, &node, &parent);
@@ -345,6 +348,7 @@ static int share_pfn_hyp(u64 pfn)
 	this->count = 1;
 	rb_link_node(&this->node, parent, node);
 	rb_insert_color(&this->node, &hyp_shared_pfns);
+	kvm_info("COVERAGE: Inside share_pfn_hyp");
 	ret = kvm_call_hyp_nvhe(__pkvm_host_share_hyp, pfn, 1);
 unlock:
 	mutex_unlock(&hyp_shared_pfns_lock);

@@ -67,14 +67,35 @@ int kcov_start_kvm(void)
 	if (!in_task())
 		return KVM_KCOV_DISABLED;
 
+	kvm_info("KCOV START KVM: Reached past Step 1");
+	kvm_info("KCOV START KVM: kcov mode");
+
+	unsigned int mode = t->kcov_mode;
+
+
 	/* Step 2: Is kcov enabled for this task? Are we inside a kcov hyp section already? */
 	switch (t->kcov_mode) {
 	case KCOV_MODE_TRACE_PC:
+		kvm_info("KCOV START KVM: KCOV_MODE_TRACE_PC");
 		kcov_prepare_switch(t); /* modifies mode, fails step 4 */
 		break;
+	// Working out which mode it is
+	case KCOV_MODE_DISABLED:
+		kvm_info("KCOV START KVM: KCOV_MODE_DISABLED");
+		return KVM_KCOV_DISABLED;
+	case KCOV_MODE_INIT:
+		kvm_info("KCOV START KVM: KCOV_MODE_INIT");
+		return KVM_KCOV_DISABLED;
+	case KCOV_MODE_TRACE_CMP:
+		kvm_info("KCOV START KVM: KCOV_MODE_TRACE_CMP");
+		return KVM_KCOV_DISABLED;
 	default:
+		kvm_info("KCOV START KVM: DEFAULT");
 		return KVM_KCOV_DISABLED;
 	}
+
+	kvm_info("KCOV START KVM: Reached past Step 2");
+
 
 	/* Step 3: Should we map in the area? */
 	if (!t->kcov_stop_cb) {
@@ -85,11 +106,16 @@ int kcov_start_kvm(void)
 	}
 	pfns = t->kcov_stop_cb_arg;
 
+	kvm_info("KCOV START KVM: Reached past Step 3");
+
 	/* Step 4: Disable preemption to pin the area to this core. */
 	if (preemptible()) {
 		preempt_disable();
 		ret |= KVM_KCOV_PREEMPT;
 	}
+
+	kvm_info("KCOV START KVM: Reached past Step 4");
+	kvm_info("KCOV START KVM: About to call kcov hypercall");
 
 	/* Step 5: Tell hyp to use this area. */
 	err = kvm_call_hyp_nvhe(__kvm_kcov_set_area, kern_hyp_va(pfns), t->kcov_size);

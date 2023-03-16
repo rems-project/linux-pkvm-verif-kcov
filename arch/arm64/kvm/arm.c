@@ -23,6 +23,10 @@
 #include <linux/sched/stat.h>
 #include <linux/psci.h>
 #include <trace/events/kvm.h>
+#include <linux/debugfs.h>
+#include <linux/kcov.h>
+#include <linux/anon_inodes.h>
+
 
 #define CREATE_TRACE_POINTS
 #include "trace_arm.h"
@@ -43,6 +47,11 @@
 #include <kvm/arm_hypercalls.h>
 #include <kvm/arm_pmu.h>
 #include <kvm/arm_psci.h>
+
+#define RAND_MAX_EL1 ((1U << 31) - 1)
+
+unsigned int rseedu_el1 = 1054;
+
 
 static enum kvm_mode kvm_mode = KVM_MODE_DEFAULT;
 DEFINE_STATIC_KEY_FALSE(kvm_protected_mode_initialized);
@@ -1816,6 +1825,9 @@ static int do_pkvm_init(u32 hyp_va_bits)
 
 	preempt_disable();
 	cpu_hyp_init_context();
+
+	kvm_info("COVERAGE: Started pKVM initialisation");
+
 	ret = kvm_call_hyp_nvhe(__pkvm_init, hyp_mem_base, hyp_mem_size,
 				num_possible_cpus(), kern_hyp_va(per_cpu_base),
 				hyp_va_bits);
@@ -2098,6 +2110,10 @@ void kvm_arch_irq_bypass_start(struct irq_bypass_consumer *cons)
 	kvm_arm_resume_guest(irqfd->kvm);
 }
 
+static unsigned int rand_lcg_unsigned(void) {
+	return rseedu_el1 = (rseedu_el1 * 1103515245u + 12345u) & ((unsigned int) RAND_MAX_EL1);
+}
+
 /**
  * Initialize Hyp-mode and memory mappings on all CPUs.
  */
@@ -2162,6 +2178,56 @@ int kvm_arch_init(void *opaque)
 	} else {
 		kvm_info("Hyp mode initialized successfully\n");
 	}
+
+	kcov_init();
+	kvm_info("KCOV INIT CALLED");
+
+	struct dentry *kcov_dentry = debugfs_lookup("kcov", NULL);
+	printk(kcov_dentry->d_name.name);
+	// const struct file_operations *kcov_fops = *(kcov_dentry->d_inode->i_fop);
+	// const struct file_operations *kcov_fops = kcov_dentry->d_fsdata;
+	const struct file_operations *kcov_fops = get_kcov_fops();
+	struct file *kcov_filp;
+
+	kcov_filp = anon_inode_getfile("[/sys/kernel/debug/kcov]", kcov_fops, NULL, O_RDWR);
+
+	// TODO: Add error checks
+	kcov_fops->open(kcov_dentry->d_inode, kcov_filp);
+	// int cover_size = CONFIG_KCOV_IRQ_AREA_SIZE * sizeof(unsigned long);
+	kcov_fops->unlocked_ioctl(kcov_filp, KCOV_INIT_TRACE, CONFIG_KCOV_IRQ_AREA_SIZE);
+	struct vm_area_struct vma;
+	vma_init(&vma, current->mm);
+
+	if (!(current->mm)) {
+		kvm_info("CURRENT MM IS NULL");
+	}
+
+	vma.vm_file = kcov_filp;
+
+	vma.vm_start = (unsigned long) vmalloc(CONFIG_KCOV_IRQ_AREA_SIZE * sizeof(unsigned long));
+	vma.vm_end	= vma.vm_start + (CONFIG_KCOV_IRQ_AREA_SIZE * sizeof(unsigned long));
+	vma.vm_pgoff = 0;
+	vma.vm_flags = VM_READ | VM_EXEC | VM_MAYREAD | VM_MAYEXEC;
+	vma.vm_page_prot = vm_get_page_prot(vma.vm_flags);
+	kcov_fops->mmap(kcov_filp, &vma);
+	kvm_info("FINISHED KCOV MMAP");
+	kcov_fops->unlocked_ioctl(kcov_filp, KCOV_ENABLE, KCOV_TRACE_PC);
+
+	// current->kcov_mode = KCOV_MODE_TRACE_PC;
+
+	int kcov_res = kcov_start_kvm();
+	kcov_stop_kvm(kcov_res);
+	
+	// Host share hcall
+	// share_pfn_hyp(pfn);
+
+
+	u64 random_address;
+	
+	// random_address = rand_lcg_unsigned();
+	random_address = 0x66ee0bda; // Valid hypervisor address found on fuzzer branch
+	u64 pfn = random_address >> PAGE_SHIFT;
+
 
 	return 0;
 

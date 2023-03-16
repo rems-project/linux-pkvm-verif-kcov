@@ -25,6 +25,9 @@
 #include <linux/log2.h>
 #include <asm/setup.h>
 
+
+#include <linux/anon_inodes.h>
+
 #define kcov_debug(fmt, ...) pr_debug("%s: " fmt, __func__, ##__VA_ARGS__)
 
 /* Number of 64-bit words written per one comparison: */
@@ -472,21 +475,32 @@ static int kcov_mmap(struct file *filep, struct vm_area_struct *vma)
 
 	spin_lock_irqsave(&kcov->lock, flags);
 	size = kcov->size * sizeof(unsigned long);
+	if (kcov->mode == KCOV_MODE_INIT) {
+		printk("KCOV MODE IS KCOV_MODE_INIT");
+	} else {
+		printk("KCOV MODE IS NOT KCOV_MODE_INIT");		
+	}
 	if (kcov->mode != KCOV_MODE_INIT || vma->vm_pgoff != 0 ||
 	    vma->vm_end - vma->vm_start != size) {
 		res = -EINVAL;
 		goto exit;
 	}
 	if (!kcov->area) {
+		printk("KCOV AREA NOT INITIALISED");
 		kcov->area = area;
 		vma->vm_flags |= VM_DONTEXPAND;
 		spin_unlock_irqrestore(&kcov->lock, flags);
 		for (off = 0; off < size; off += PAGE_SIZE) {
+			// printk("Inside loop");
 			page = vmalloc_to_page(kcov->area + off);
-			if (vm_insert_page(vma, vma->vm_start + off, page))
-				WARN_ONCE(1, "vm_insert_page() failed");
+			// printk("Completed vmalloc");
+			// if (vm_insert_page(vma, vma->vm_start + off, page))
+			// 	WARN_ONCE(1, "vm_insert_page() failed");
+			// printk("Completed vm_insert_page");
 		}
 		return 0;
+	} else {
+		printk("KCOV AREA ALREADY INITIALISED");
 	}
 exit:
 	spin_unlock_irqrestore(&kcov->lock, flags);
@@ -508,6 +522,7 @@ static int kcov_open(struct inode *inode, struct file *filep)
 	filep->private_data = kcov;
 	return nonseekable_open(inode, filep);
 }
+
 
 static int kcov_close(struct inode *inode, struct file *filep)
 {
@@ -573,24 +588,31 @@ static int kcov_ioctl_locked(struct kcov *kcov, unsigned int cmd,
 
 	switch (cmd) {
 	case KCOV_INIT_TRACE:
+		printk("KCOV COMMAND: KCOV_INIT_TRACE");
 		/*
 		 * Enable kcov in trace mode and setup buffer size.
 		 * Must happen before anything else.
 		 */
-		if (kcov->mode != KCOV_MODE_DISABLED)
+		if (kcov->mode != KCOV_MODE_DISABLED) {
+			printk("KCOV COMMAND: KCOV_INIT_TRACE - ERROR 1");
 			return -EBUSY;
+		}
 		/*
 		 * Size must be at least 2 to hold current position and one PC.
 		 * Later we allocate size * sizeof(unsigned long) memory,
 		 * that must not overflow.
 		 */
 		size = arg;
-		if (size < 2 || size > INT_MAX / sizeof(unsigned long))
+		if (size < 2 || size > INT_MAX / sizeof(unsigned long)) {
+			printk("KCOV COMMAND: KCOV_INIT_TRACE - ERROR 2");
 			return -EINVAL;
+		}
 		kcov->size = size;
 		kcov->mode = KCOV_MODE_INIT;
 		return 0;
 	case KCOV_ENABLE:
+		printk("KCOV COMMAND: KCOV_ENABLE");
+
 		/*
 		 * Enable coverage for the current task.
 		 * At this point user must have been enabled trace mode,
@@ -598,11 +620,15 @@ static int kcov_ioctl_locked(struct kcov *kcov, unsigned int cmd,
 		 * at task exit or voluntary by KCOV_DISABLE. After that it can
 		 * be enabled for another task.
 		 */
-		if (kcov->mode != KCOV_MODE_INIT || !kcov->area)
+		if (kcov->mode != KCOV_MODE_INIT || !kcov->area) {
+			printk("KCOV COMMAND: KCOV_ENABLE - ERROR 1");
 			return -EINVAL;
+		}
 		t = current;
-		if (kcov->t != NULL || t->kcov != NULL)
+		if (kcov->t != NULL || t->kcov != NULL) {
+			printk("KCOV COMMAND: KCOV_ENABLE - ERROR 2");
 			return -EBUSY;
+		}
 		mode = kcov_get_mode(arg);
 		if (mode < 0)
 			return mode;
@@ -713,6 +739,8 @@ static long kcov_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		arg = (unsigned long)remote_arg;
 	}
 
+	printk("INSIDE KCOV IOCTL");
+
 	kcov = filep->private_data;
 	spin_lock_irqsave(&kcov->lock, flags);
 	res = kcov_ioctl_locked(kcov, cmd, arg);
@@ -723,13 +751,19 @@ static long kcov_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	return res;
 }
 
-static const struct file_operations kcov_fops = {
+const struct file_operations kcov_fops = {
 	.open		= kcov_open,
 	.unlocked_ioctl	= kcov_ioctl,
 	.compat_ioctl	= kcov_ioctl,
 	.mmap		= kcov_mmap,
 	.release        = kcov_close,
 };
+
+const struct file_operations *get_kcov_fops(void) {
+	return &kcov_fops;
+}
+
+EXPORT_SYMBOL(get_kcov_fops);
 
 /*
  * kcov_remote_start() and kcov_remote_stop() can be used to annotate a section
@@ -1033,7 +1067,8 @@ u64 kcov_common_handle(void)
 }
 EXPORT_SYMBOL(kcov_common_handle);
 
-static int __init kcov_init(void)
+
+int kcov_init(void)
 {
 	int cpu;
 
@@ -1045,14 +1080,18 @@ static int __init kcov_init(void)
 		per_cpu_ptr(&kcov_percpu_data, cpu)->irq_area = area;
 	}
 
+	printk("KCOV: INSIDE KCOV INIT");
 	/*
 	 * The kcov debugfs file won't ever get removed and thus,
 	 * there is no need to protect it against removal races. The
 	 * use of debugfs_create_file_unsafe() is actually safe here.
 	 */
 	debugfs_create_file_unsafe("kcov", 0600, NULL, NULL, &kcov_fops);
-
+	
 	return 0;
 }
 
-device_initcall(kcov_init);
+EXPORT_SYMBOL(kcov_init);
+
+
+// device_initcall(kcov_init);

@@ -619,11 +619,11 @@ static inline void kcov_stop_kvm(int ret) {}
 	({								\
 		int kcov = kcov_start_kvm();				\
 		struct arm_smccc_res res;				\
-									\
+		kvm_info("Inside kvm_call_hyp_nvhe - before hcall");	\
 		arm_smccc_1_1_hvc(KVM_HOST_SMCCC_FUNC(f),		\
 				  ##__VA_ARGS__, &res);			\
 		WARN_ON(res.a0 != SMCCC_RET_SUCCESS);			\
-									\
+		kvm_info("Inside kvm_call_hyp_nvhe - after hcall");		\
 		kcov_stop_kvm(kcov);					\
 		res.a1;							\
 	})

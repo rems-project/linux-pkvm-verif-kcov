@@ -6,6 +6,7 @@
 #include <uapi/linux/kcov.h>
 
 struct task_struct;
+const struct file_operations *get_kcov_fops(void);
 
 #ifdef CONFIG_KCOV
 
@@ -42,6 +43,8 @@ do {						\
 void kcov_remote_start(u64 handle);
 void kcov_remote_stop(void);
 u64 kcov_common_handle(void);
+int kcov_init(void);
+
 
 static inline void kcov_remote_start_common(u64 id)
 {
@@ -88,6 +91,11 @@ static inline void kcov_remote_start_common(u64 id) {}
 static inline void kcov_remote_start_usb(u64 id) {}
 static inline void kcov_remote_start_usb_softirq(u64 id) {}
 static inline void kcov_remote_stop_softirq(void) {}
+
+static inline int kcov_init(void) {
+	return 0;
+}
+
 
 #endif /* CONFIG_KCOV */
 #endif /* _LINUX_KCOV_H */
